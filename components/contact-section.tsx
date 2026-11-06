@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { siteConfig } from "@/lib/site";
 
 type ContactField = "fullName" | "email" | "subject" | "message";
 type ContactErrors = Partial<Record<ContactField, string>>;
+type FormMessage = { kind: "success" | "error"; text: string } | null;
 type IconName = "mail" | "linkedin" | "github" | "location";
 
 function ContactIcon({ name }: { name: IconName }) {
@@ -50,12 +51,13 @@ function validateContact(values: Record<ContactField, string>): ContactErrors {
 export function ContactSection() {
   const [errors, setErrors] = useState<ContactErrors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [formMessage, setFormMessage] = useState("");
+  const [formMessage, setFormMessage] = useState<FormMessage>(null);
   const [copyMessage, setCopyMessage] = useState("");
+  const submissionLock = useRef(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (submissionLock.current) return;
 
     const form = event.currentTarget;
     const formData = new FormData(form);
@@ -69,28 +71,51 @@ export function ContactSection() {
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
-      setFormMessage("Please correct the highlighted fields and try again.");
+      setFormMessage({ kind: "error", text: "Please correct the highlighted fields and try again." });
+      const firstInvalid = Object.keys(nextErrors)[0];
+      if (firstInvalid) form.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${firstInvalid}"]`)?.focus();
       return;
     }
 
     setErrors({});
+    setFormMessage(null);
+    submissionLock.current = true;
     setSubmitting(true);
-    setFormMessage("Preparing your email…");
-
-    const subject = encodeURIComponent(values.subject.trim());
-    const body = encodeURIComponent(
-      `Name: ${values.fullName.trim()}\nEmail: ${values.email.trim()}\n\n${values.message.trim()}`,
-    );
-
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
 
     try {
-      window.location.href = `mailto:${siteConfig.email}?subject=${subject}&body=${body}`;
-      setFormMessage("Your email app should open with your message ready. Review it there and press Send.");
-      setSubmitting(false);
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...values,
+          website: String(formData.get("website") ?? ""),
+        }),
+      });
+      const result = await response.json().catch(() => null) as {
+        message?: string;
+        fieldErrors?: ContactErrors;
+      } | null;
+
+      if (!response.ok) {
+        if (result?.fieldErrors) setErrors(result.fieldErrors);
+        const errorText = response.status === 503
+          ? "The contact form is temporarily unavailable. Please email me directly."
+          : result?.message ?? "We could not send your message. Please try again or email me directly.";
+        setFormMessage({ kind: "error", text: errorText });
+        return;
+      }
+
+      form.reset();
+      setErrors({});
+      setFormMessage({ kind: "success", text: "Thank you — your message has been sent successfully." });
     } catch {
+      setFormMessage({
+        kind: "error",
+        text: "We could not send your message. Check your connection and try again, or email me directly.",
+      });
+    } finally {
+      submissionLock.current = false;
       setSubmitting(false);
-      setFormMessage("We couldn’t open your email app. Please use the email link to contact Muhammad Ali directly.");
     }
   }
 
@@ -154,6 +179,11 @@ export function ContactSection() {
             <p>Tell me a little about what’s on your mind.</p>
           </div>
 
+          <div className="contact-honeypot" aria-hidden="true">
+            <label htmlFor="contact-website">Leave this field empty</label>
+            <input id="contact-website" name="website" type="text" tabIndex={-1} autoComplete="off" />
+          </div>
+
           <div className="contact-fields-grid">
             <div className="form-field">
               <label htmlFor="contact-name">Full name <span aria-hidden="true">*</span></label>
@@ -182,12 +212,18 @@ export function ContactSection() {
 
           <div className="contact-form-footer">
             <button className="button button-primary contact-submit" type="submit" disabled={submitting}>
-              {submitting ? "Preparing email…" : "Open email app"}
+              {submitting ? "Sending…" : "Send message"}
               <span aria-hidden="true">{submitting ? "…" : "↗"}</span>
             </button>
-            <p className="mailto-note">Your message opens in your email app for you to review and send.</p>
+            <p className="mailto-note">You’ll see an on-screen confirmation when your message is sent.</p>
           </div>
-          <p className={`form-status${formMessage.startsWith("Please") || formMessage.startsWith("We couldn’t") ? " form-status-error" : ""}`} role={formMessage.startsWith("Please") || formMessage.startsWith("We couldn’t") ? "alert" : "status"} aria-live="polite">{formMessage}</p>
+          <p
+            className={`form-status${formMessage?.kind === "error" ? " form-status-error" : ""}`}
+            role={formMessage?.kind === "error" ? "alert" : "status"}
+            aria-live={formMessage?.kind === "error" ? "assertive" : "polite"}
+          >
+            {formMessage?.text}
+          </p>
         </form>
       </div>
     </section>

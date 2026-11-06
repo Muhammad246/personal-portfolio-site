@@ -16,12 +16,16 @@ Open `http://localhost:3000`. Use `npm run build` for a production build and `np
 ## Main files
 
 - `app/layout.tsx` sets the document shell, shared navigation/footer, theme provider, and SEO metadata.
+- `app/api/contact/route.ts` validates contact submissions and sends email through Resend using server-only environment variables.
+- `app/icon.svg` provides the App Router favicon, and `app/opengraph-image.tsx` generates the LinkedIn/social preview image.
 - `app/page.tsx` renders the homepage sections: introduction, project list, skills, and contact.
 - `app/projects/[slug]/page.tsx` creates a detail page for each project in the typed data list.
 - `app/globals.css` contains the design tokens, responsive layout, theme colors, accessibility states, and motion preferences.
 - `components/` contains the shared header, footer, theme controls, social links, and project card.
 - `lib/projects.ts` is the source for the featured projects and technical skills.
 - `lib/site.ts` holds site configuration and environment-backed contact/social links.
-- `public/cv.txt` is a downloadable profile summary containing only the facts supplied so far; complete it before using it as a formal CV.
+- `public/Ali_Analyst_Resume.pdf` is the downloadable CV.
 
-Copy `.env.example` to `.env.local` and add the deployed site URL to enable canonical metadata. The email address and social profiles are maintained in `lib/site.ts`; repository and demo URLs are in `lib/projects.ts`. The contact form validates the message and opens the visitor’s email app with a prefilled draft, so the visitor reviews and sends it from their own account. No email service credentials are needed. Project detail pages intentionally contain prompts until verified descriptions, tools, and outcomes are available.
+Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SITE_URL` to the actual deployed URL for absolute social preview metadata. To enable contact delivery, configure `RESEND_API_KEY`, `CONTACT_TO_EMAIL`, and `CONTACT_FROM_EMAIL`. Add a domain you control in Resend, publish the DNS records it provides, and verify the domain before using its address as `CONTACT_FROM_EMAIL`. Configure the same variables in Vercel project settings and redeploy. Never prefix the Resend key with `NEXT_PUBLIC_` or commit `.env.local`.
+
+The email address and social profiles are maintained in `lib/site.ts`; repository and demo URLs are in `lib/projects.ts`. Until the Resend settings are configured, the contact endpoint returns a service-unavailable response and the form keeps the visitor’s text so they can retry or email directly. Project detail pages intentionally contain prompts until verified descriptions, tools, and outcomes are available.
